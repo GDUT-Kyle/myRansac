@@ -180,5 +180,6 @@ build/CMakeFiles/main.dir/link.txt
 build/CMakeFiles/main.dir/main.cpp.o
 build/CMakeFiles/main.dir/progress.make
 build/Testing/Temporary/LastTest.log
+./build
 .vscode/c_cpp_properties.json
 .vscode/settings.json
