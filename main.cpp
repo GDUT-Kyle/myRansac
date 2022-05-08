@@ -2,25 +2,12 @@
 
 using namespace std;
 
-Ransac::Ransac(/* args */)
-{
-    pickNums = 10;
-    maxIter = 500;
-    threshold = 0.05;
-
-    best_fit = 0;
-    best_err = __FLT_MAX__;
-}
-
-Ransac::~Ransac()
-{
-}
-
 void Ransac::estimate_ransac(const vector<float>& data_x, const vector<float>& data_y, float& k_, float& b_)
 {
     if(data_x.size() != data_y.size())
         return;
     int randNums[pickNums];
+    vector<bool> inliers(data_x.size(), false);
     for(int iter=0; iter<maxIter; iter++)
     {
         for(int i=0; i<pickNums; i++) // generate random numbers, and pick points
@@ -30,21 +17,20 @@ void Ransac::estimate_ransac(const vector<float>& data_x, const vector<float>& d
         }
         // estimate a line
         Eigen::Matrix<float, 2, 1> X = Eigen::Matrix<float, 2, 1>::Zero(); // k, b
-        Eigen::Matrix<float, 1, 2> A = Eigen::Matrix<float, 1, 2>::Zero();
-        float B = 0;
-        for(int i=0; i<pickNums; i++)
-        {
-            A(0, 0) += data_x[randNums[i]];
-            A(0, 1)++;
-            B += data_y[randNums[i]];
-        }
-        X = B*(A.transpose()*A).inverse()*A.transpose();
+        const float& point1_x = data_x[randNums[0]];
+        const float& point1_y = data_y[randNums[0]];
+        const float& point2_x = data_x[randNums[1]];
+        const float& point2_y = data_y[randNums[1]];
+        X(0, 0) = (point1_y - point2_y)/(point1_x - point2_x);
+        X(1, 0) = (point1_x*point2_y - point2_x*point1_y)/(point1_x - point2_x);
 
         if(X.hasNaN() || abs(X(0,0))>1e2 || abs(X(1,0))>1e2)
             continue;
 
         // Get number of inlier
         int inlier = 0;
+        float inliers_dis = 0;
+        vector<bool> inliers_tmp(data_x.size(), false);
         for(int i=0; i<data_x.size(); i++)
         {
             const float& x = data_x[i];
@@ -53,7 +39,15 @@ void Ransac::estimate_ransac(const vector<float>& data_x, const vector<float>& d
             float& b = X(1, 0);
             float dis = abs(k*x-y+b)/sqrt(1+k*k);
             if(dis < threshold)
+            {
                 inlier++;
+                inliers_dis += dis;
+                inliers_tmp[i] = true;
+            }
+            else
+            {
+                inliers_tmp[i] = false;
+            }
         }
 
         // cout<<"X ="<<X.transpose()<<endl;
@@ -62,19 +56,33 @@ void Ransac::estimate_ransac(const vector<float>& data_x, const vector<float>& d
         if(inlier > best_fit)
         {
             best_fit = inlier;
-            k_ = X(0, 0);
-            b_ = X(1, 0);
+            inliers.swap(inliers_tmp);
         }
 
-        if(inlier > data_x.size()/3)
+        if(inlier > 2*data_x.size()/3)
         {
-            cout<<"iterate num = "<<iter<<endl;
+            std::cout<<"iterate num = "<<iter<<endl;
             break;
         }
     }
-    cout<<"points size = "<<data_x.size()<<", best_fit = "<<best_fit<<endl;
+    std::cout<<"points size = "<<data_x.size()<<", best_fit = "<<best_fit<<endl;
 
     // 将内点进行一次最小二乘法拟合
+    Eigen::Matrix<float, 100, 2> A = Eigen::Matrix<float, 100, 2>::Zero();
+    Eigen::Matrix<float, 2, 1> X = Eigen::Matrix<float, 2, 1>::Zero();
+    Eigen::Matrix<float, 100, 1> B = Eigen::Matrix<float, 100, 1>::Zero();
+    for(int i=0; i<data_x.size(); i++)
+    {
+        if(!inliers[i])
+            continue;
+        A(i, 0) = data_x[i];
+        A(i, 1) = 1;
+        B(i, 0) = data_y[i];
+    }
+    X = A.colPivHouseholderQr().solve(B);
+    X = (A.transpose()*A).inverse()*A.transpose()*B;
+    k_ = X(0, 0);
+    b_ = X(1, 0);
 }
 
 int main(int, char**) {
@@ -86,7 +94,8 @@ int main(int, char**) {
     
     estimator.estimate_ransac(data_x, data_y, k_, b_);
 
-    cout<<k_<<", "<<b_<<endl;
+    // Estimated linear equation
+    cout<<"y = ("<<k_<<") * x + ("<<b_<<")"<<endl;
 
     return 0;
 }

@@ -15,7 +15,17 @@ private:
     float best_fit;
     float best_err;
 public:
-    Ransac(/* args */);
-    ~Ransac();
+    Ransac();
+    ~Ransac(){};
     void estimate_ransac(const vector<float>& data_x, const vector<float>& data_y, float& k, float& b);
 };
+
+Ransac::Ransac()
+{
+    pickNums = 2;
+    maxIter = 500;
+    threshold = 0.05;
+
+    best_fit = 0;
+    best_err = __FLT_MAX__;
+}
